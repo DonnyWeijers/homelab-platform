@@ -1,0 +1,58 @@
+// Renovate for the stacks. Runs from .github/workflows/renovate.yml.
+// Every image is pinned to a specific version; Renovate opens a PR per new version.
+// Nothing is merged automatically. After merging: `git pull` on the server, then docker/update-stacks.sh <stack>.
+{
+  $schema: 'https://docs.renovatebot.com/renovate-schema.json',
+  extends: ['config:recommended', ':dependencyDashboard', ':timezone(Europe/Amsterdam)'],
+  enabledManagers: ['docker-compose', 'dockerfile', 'github-actions'],
+  includePaths: ['docker/**', '.github/workflows/**'],
+  // Runs daily (dashboard stays current), but opens PRs once a week, to apply them in one go at the weekend.
+  // Whole Saturday, not a morning window: GitHub starts scheduled workflows hours late
+  schedule: ['on saturday'],
+  // Security fixes don't wait for the weekend
+  vulnerabilityAlerts: {
+    schedule: ['at any time'],
+    labels: ['security'],
+  },
+  osvVulnerabilityAlerts: true,
+  prConcurrentLimit: 25,
+  prHourlyLimit: 0,
+  labels: ['renovate'],
+  packageRules: [
+    // ---- stacks that need their release notes read first (see update-stacks.sh)
+    {
+      matchPackageNames: [
+        'authelia/authelia', 'koenkk/zigbee2mqtt', 'nextcloud', 'mariadb',
+        'ghcr.io/immich-app/**', 'ghcr.io/home-assistant/home-assistant',
+      ],
+      addLabels: ['manual'],
+      prBodyNotes: ['⚠️ Read the release notes before merging: this stack can have breaking changes or one-way migrations.'],
+    },
+    // ---- a hub and its agents must stay on the same version: one PR
+    {
+      matchPackageNames: ['henrygd/beszel', 'henrygd/beszel-agent', 'henrygd/beszel-agent-intel'],
+      groupName: 'beszel',
+    },
+    // ---- database majors need a dump/restore or feature-compatibility steps: never propose them
+    {
+      matchPackageNames: ['postgres', 'docker.io/library/postgres', 'mariadb', 'mongo', 'ghcr.io/immich-app/postgres'],
+      matchUpdateTypes: ['major'],
+      enabled: false,
+    },
+    // ---- Nextcloud can't skip majors: one PR per major version
+    {
+      matchPackageNames: ['nextcloud'],
+      separateMultipleMajor: true,
+    },
+    // ---- tag formats Renovate can't sort on its own, e.g. linuxserver.io's 1.2.3-ls45
+    {
+      matchPackageNames: ['lscr.io/linuxserver/**'],
+      versioning: 'regex:^v?(?<major>\\d+)\\.(?<minor>\\d+)\\.(?<patch>\\d+)-ls(?<revision>\\d+)$',
+    },
+    {
+      // Rebuilds only get a suffix tag, e.g. 6.8 → 6.8-dockerupdate-1; the plain 6.8 never moves
+      matchPackageNames: ['erikvl87/languagetool'],
+      versioning: 'regex:^(?<major>\\d+)\\.(?<minor>\\d+)(?:-dockerupdate-(?<patch>\\d+))?$',
+    },
+  ],
+}

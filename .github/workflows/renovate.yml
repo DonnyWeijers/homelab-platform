@@ -1,0 +1,47 @@
+# Renovate: opens a PR per new image version (config: .github/renovate.json5).
+# Runs Renovate with npx, so a runner needs no Docker socket.
+# Token: the repo secret RENOVATE_TOKEN (fine-grained PAT for this repo: Contents, Pull requests, Issues and
+# Workflows read/write) if set, otherwise the built-in workflow token. The built-in one can't update files in
+# .github/workflows, so PRs for this workflow's own pins need the PAT.
+name: Renovate
+
+on:
+  schedule:
+    - cron: '0 4 * * *' # daily, 06:00 Amsterdam time in summer
+  workflow_dispatch:
+    inputs:
+      ignore_schedule:
+        description: 'Open PRs now, outside the Saturday window'
+        type: boolean
+        default: false
+
+concurrency:
+  group: renovate
+  cancel-in-progress: false
+
+permissions:
+  contents: write # branches for the PRs (built-in token fallback)
+  pull-requests: write
+  issues: write # Dependency Dashboard
+
+jobs:
+  renovate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24 # Renovate 44 needs Node 24 (RegExp.escape)
+      - name: Run Renovate
+        run: npx --yes renovate@44.115.0
+        env:
+          RENOVATE_PLATFORM: github
+          RENOVATE_REPOSITORIES: ${{ github.repository }}
+          RENOVATE_TOKEN: ${{ secrets.RENOVATE_TOKEN || github.token }}
+          # Commits made with the built-in token are authored as github-actions[bot]; Renovate must see them as its own
+          RENOVATE_GIT_AUTHOR: 'github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>'
+          RENOVATE_ONBOARDING: 'false'
+          RENOVATE_REQUIRE_CONFIG: 'optional'
+          LOG_LEVEL: info
+          # Manual run with ignore_schedule: override the Saturday window for this run only
+          RENOVATE_FORCE: ${{ inputs.ignore_schedule && '{"schedule":["at any time"]}' || '{}' }}
